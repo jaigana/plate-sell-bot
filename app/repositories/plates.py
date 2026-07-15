@@ -12,7 +12,10 @@ class PlateRepository:
         return await conn.fetchrow(
             """
             INSERT INTO plates(country_code, plate_number, state, reserved_by, reserved_until)
-            VALUES($1, $2, 'STATE_SALE', $3, CASE WHEN $3 IS NULL THEN NULL ELSE now() + interval '5 minutes' END)
+            VALUES(
+                $1, $2, 'STATE_SALE', $3::bigint,
+                CASE WHEN $3::bigint IS NULL THEN NULL ELSE now() + interval '5 minutes' END
+            )
             RETURNING *
             """, country_code, plate_number, reserved_by,
         )
@@ -92,4 +95,3 @@ class PlateRepository:
             """UPDATE plates SET owner_id=NULL, state='STATE_SALE', reserved_by=NULL, reserved_until=NULL, updated_at=now()
             WHERE owner_id=$1 AND state='OWNED' RETURNING *""", user_id
         ))
-
