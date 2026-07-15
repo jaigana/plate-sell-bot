@@ -97,7 +97,10 @@ async def _render(
 
 async def _error(event: Message | CallbackQuery, bot: Bot, state: FSMContext, exc: Exception) -> None:
     message = str(exc) if isinstance(exc, DomainError) else "Произошла техническая ошибка. Попробуйте ещё раз."
-    logger.info("user_action_rejected", extra={"error": message})
+    if isinstance(exc, DomainError):
+        logger.info("user_action_rejected", extra={"error": message})
+    else:
+        logger.exception("user_action_failed", extra={"error": message, "error_type": type(exc).__name__})
     if isinstance(event, CallbackQuery):
         await event.answer(message, show_alert=True)
     else:

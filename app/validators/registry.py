@@ -20,8 +20,14 @@ class Country:
 class CountryRegistry:
     def __init__(self) -> None:
         self._countries: dict[str, Country] = {
-            "RU": Country("RU", "Россия", True, PlateValidatorRU(), "А001АА77", "Буквы — только кириллица: А001АА77"),
-            "KZ": Country("KZ", "Казахстан", True, PlateValidatorKZ(), "777AAA01", "Физлицо: 777AAA01 · юрлицо: 001AA01"),
+            "RU": Country(
+                "RU", "Россия", True, PlateValidatorRU(), "А001АА77",
+                "Пример: А001АА77 · только кириллица А В Е К М Н О Р С Т У Х; латиница A, B, C запрещена.",
+            ),
+            "KZ": Country(
+                "KZ", "Казахстан", True, PlateValidatorKZ(), "777AAA01",
+                "Физлицо: 777AAA01 · юрлицо: 001AA01 · только английские A–Z; кириллица А, В, С запрещена.",
+            ),
             "UA": Country("UA", "Украина", False),
             "BY": Country("BY", "Беларусь", False),
             "KG": Country("KG", "Кыргызстан", False),

@@ -35,3 +35,8 @@ def test_active_countries_have_examples_for_the_release_flow() -> None:
         ("RU", "А001АА77"),
         ("KZ", "777AAA01"),
     ]
+
+
+def test_country_hints_explain_required_alphabets() -> None:
+    assert "А В Е К М Н О Р С Т У Х" in country_registry.get("RU").format_hint
+    assert "A–Z" in country_registry.get("KZ").format_hint

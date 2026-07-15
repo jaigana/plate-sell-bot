@@ -1,8 +1,13 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 import asyncpg
+
+logger = logging.getLogger(__name__)
+
+_KZ_FORBIDDEN_SERIES_FALLBACK = frozenset({"SEX", "ASS", "XXX", "BLY", "XER", "GEI"})
 
 
 class SettingsRepository:
@@ -23,7 +28,16 @@ class SettingsRepository:
         )
 
     async def official_forbidden_series(self, conn: asyncpg.Connection, country_code: str) -> set[str]:
-        rows = await conn.fetch(
-            "SELECT series FROM official_forbidden_plate_series WHERE country_code=$1", country_code.upper()
-        )
+        country_code = country_code.upper()
+        if country_code != "KZ":
+            return set()
+        try:
+            rows = await conn.fetch(
+                "SELECT series FROM official_forbidden_plate_series WHERE country_code=$1", country_code
+            )
+        except asyncpg.UndefinedTableError:
+            # Allows existing databases to keep issuing KZ numbers if deployment reaches
+            # application code before the new migration has been recorded.
+            logger.warning("official_plate_rules_missing", extra={"country_code": country_code})
+            return set(_KZ_FORBIDDEN_SERIES_FALLBACK)
         return {row["series"] for row in rows}
