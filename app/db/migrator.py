@@ -26,8 +26,9 @@ async def apply_migrations(pool: asyncpg.Pool, migrations_dir: Path) -> None:
             if path.name in applied:
                 continue
             sql = path.read_text(encoding="utf-8")
-            logger.info("applying_migration", extra={"filename": path.name})
+            # ``filename`` is a built-in LogRecord field; structured extras must
+            # never overwrite it or logging raises KeyError during startup.
+            logger.info("applying_migration", extra={"migration_filename": path.name})
             async with conn.transaction():
                 await conn.execute(sql)
                 await conn.execute("INSERT INTO schema_migrations(filename) VALUES($1)", path.name)
-
