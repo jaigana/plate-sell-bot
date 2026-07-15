@@ -25,6 +25,5 @@ class PlateValidator(ABC):
     country_code: str
 
     @abstractmethod
-    def validate(self, value: str, *, blacklisted_series: set[str] | None = None) -> str:
+    def validate(self, value: str, *, forbidden_series: set[str] | None = None) -> str:
         raise NotImplementedError
-

@@ -38,23 +38,22 @@ class Screen(StrEnum):
     ADMIN_AUCTIONS = "ADMIN_AUCTIONS"
     ADMIN_AUCTION_VIEW = "ADMIN_AUCTION_VIEW"
     ADMIN_FINANCE = "ADMIN_FINANCE"
-    ADMIN_BLACKLISTS = "ADMIN_BLACKLISTS"
     ADMIN_SETTINGS = "ADMIN_SETTINGS"
     ADMIN_CARDS = "ADMIN_CARDS"
     ADMIN_BACKUPS = "ADMIN_BACKUPS"
 
 
 LEGAL_NOTICE = (
-    "⚠️ <b>Виртуальные игровые активы</b>\n\n"
-    "Все номера в этом боте — цифровые коллекционные активы исключительно для Car Parking Multiplayer 2. "
-    "Они не являются, не заменяют и не имитируют реальные государственные регистрационные знаки любой страны."
+    "⚠️ <b>Виртуальные игровые активы</b>\n"
+    "<blockquote>Все номера в этом боте — цифровые коллекционные активы исключительно для Car Parking Multiplayer 2. "
+    "Они не являются и не заменяют реальные государственные регистрационные знаки.</blockquote>"
 )
 
 
 def home_text(card: dict[str, Any] | None) -> str:
     title = (card or {}).get("title", "CPM2 Plates Market")
     description = (card or {}).get("description", "Маркетплейс игровых номеров Car Parking Multiplayer 2.")
-    return f"🏁 <b>{escape(title)}</b>\n\n{escape(description)}\n\n{LEGAL_NOTICE}"
+    return f"🏁 <b>{escape(title)}</b>\n<blockquote>{escape(description)}</blockquote>\n{LEGAL_NOTICE}"
 
 
 def plate_text(plate: dict[str, Any], *, mine: bool = False) -> str:
@@ -66,8 +65,7 @@ def plate_text(plate: dict[str, Any], *, mine: bool = False) -> str:
     }
     lines = [
         f"🚘 <b>{plate['plate_number']}</b>",
-        f"Страна: {plate['country_code']}",
-        f"Статус: {state_labels.get(plate['state'], plate['state'])}",
+        f"<blockquote>Страна: {plate['country_code']}\nСтатус: {state_labels.get(plate['state'], plate['state'])}</blockquote>",
     ]
     if plate.get("sale_price"):
         lines.append(f"Цена: ⭐{plate['sale_price']}")

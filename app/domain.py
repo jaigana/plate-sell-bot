@@ -29,6 +29,7 @@ class TransactionType(StrEnum):
     SALE = "SALE"
     AUCTION_SALE = "AUCTION_SALE"
     ADMIN_ADJUSTMENT = "ADMIN_ADJUSTMENT"
+    REFUND = "REFUND"
 
 
 class DomainError(Exception):
@@ -56,4 +57,3 @@ def split_sale_amount(amount: int, commission_percent: int) -> MoneySplit:
         raise DomainError("Комиссия платформы настроена некорректно.")
     fee = amount * commission_percent // 100
     return MoneySplit(seller_amount=amount - fee, fee_amount=fee)
-

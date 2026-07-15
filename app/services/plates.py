@@ -8,8 +8,8 @@ from app.validators.registry import country_registry
 class PlateService(Service):
     async def normalize_and_validate(self, country_code: str, plate_number: str) -> str:
         async with self.pool.acquire() as conn:
-            blacklist = await self.repos.settings.kz_blacklist(conn) if country_code.upper() == "KZ" else set()
-            return country_registry.validate(country_code, plate_number, blacklisted_series=blacklist)
+            forbidden_series = await self.repos.settings.official_forbidden_series(conn, country_code)
+            return country_registry.validate(country_code, plate_number, forbidden_series=forbidden_series)
 
     async def search(self, raw_query: str, country_code: str | None = None) -> list[dict]:
         query = raw_query.strip().replace(" ", "").replace("-", "").upper()
@@ -32,4 +32,3 @@ class PlateService(Service):
     async def my_plates(self, user_id: int) -> list[dict]:
         async with self.pool.acquire() as conn:
             return [dict(row) for row in await self.repos.plates.list_owned(conn, user_id)]
-

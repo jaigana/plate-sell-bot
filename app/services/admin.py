@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest
+
 from app.domain import AccessDenied, DomainError, NotFoundError, PlateState
 from app.services.common import Service, setting_int
 
@@ -64,23 +67,6 @@ class AdminService(Service):
         async with self.pool.acquire() as conn:
             return await self.repos.settings.all(conn)
 
-    async def blacklist(self, actor_id: int) -> set[str]:
-        await self.require_admin(actor_id)
-        async with self.pool.acquire() as conn:
-            return await self.repos.settings.kz_blacklist(conn)
-
-    async def set_blacklist(self, actor_id: int, series: str, *, add: bool) -> None:
-        await self.require_admin(actor_id)
-        series = series.strip().upper()
-        if not series.isascii() or not series.isalpha() or not 2 <= len(series) <= 3:
-            raise DomainError("Серия должна состоять из 2–3 ASCII-латинских букв.")
-        async with self.pool.acquire() as conn, conn.transaction():
-            if add:
-                await self.repos.settings.add_blacklist(conn, "KZ", series, actor_id)
-            else:
-                await self.repos.settings.remove_blacklist(conn, "KZ", series)
-            await self.repos.admin.audit(conn, actor_id, "blacklist_update", "series", series, {"add": add})
-
     async def block(self, actor_id: int, user_id: int, reason: str) -> None:
         await self.require_admin(actor_id)
         if not reason.strip():
@@ -127,6 +113,67 @@ class AdminService(Service):
             )
             await self.repos.transactions.ownership(conn, plate_id, plate["owner_id"], new_owner_id, "ADMIN_TRANSFER", None)
             await self.repos.admin.audit(conn, actor_id, "force_transfer", "plate", str(plate_id), {"new_owner_id": new_owner_id})
+
+    async def refund_stars(self, actor_id: int, user_id: int, charge_id: str, bot: Bot) -> dict[str, int | str]:
+        """Refund a completed Stars payment and reverse the corresponding local entitlement."""
+        await self.require_admin(actor_id)
+        charge_id = charge_id.strip()
+        if not charge_id:
+            raise DomainError("Укажите идентификатор платежа Telegram.")
+
+        async with self.pool.acquire() as conn, conn.transaction():
+            payment = await self.repos.transactions.lock_refundable_payment(conn, charge_id)
+            if not payment or payment["user_id"] != user_id:
+                raise NotFoundError("Подходящий завершённый платёж этого пользователя не найден.")
+
+            amount = abs(payment["amount"])
+            if payment["transaction_type"] == "TOPUP":
+                users = await self.repos.users.lock_many(conn, [user_id])
+                user = users.get(user_id)
+                if not user or user["balance_available"] < amount:
+                    raise DomainError("Нельзя вернуть этот платёж: Stars уже использованы или заморожены в ставке.")
+                refund_kind = "TOPUP"
+            elif payment["transaction_type"] == "MINT_INVOICE":
+                plate = await self.repos.plates.lock(conn, payment["plate_id"])
+                if not plate or plate["owner_id"] != user_id or plate["state"] != PlateState.OWNED:
+                    raise DomainError("Нельзя вернуть эмиссию: номер уже передан, выставлен или участвует в аукционе.")
+                refund_kind = "MINT_INVOICE"
+            else:
+                raise DomainError("Этот тип платежа нельзя вернуть через бота.")
+
+            try:
+                refunded = await bot.refund_star_payment(user_id=user_id, telegram_payment_charge_id=charge_id)
+            except TelegramBadRequest as exc:
+                raise DomainError("Telegram отклонил возврат. Проверьте идентификатор платежа и его статус.") from exc
+            if not refunded:
+                raise DomainError("Telegram не подтвердил возврат. Повторите попытку позже.")
+
+            if refund_kind == "TOPUP":
+                await self.repos.users.set_balances(
+                    conn, user_id, user["balance_available"] - amount, user["balance_frozen"]
+                )
+                ledger_amount = -amount
+            else:
+                await self.repos.plates.set_owner_and_state(conn, plate["id"], None, PlateState.STATE_SALE)
+                await self.repos.transactions.ownership(conn, plate["id"], user_id, None, "REFUND", amount)
+                ledger_amount = amount
+
+            await self.repos.transactions.update_status(conn, payment["id"], "CANCELLED")
+            await self.repos.transactions.create(
+                conn,
+                user_id=user_id,
+                counterparty_id=actor_id,
+                plate_id=payment["plate_id"],
+                amount=ledger_amount,
+                transaction_type="REFUND",
+                external_ref=f"refund:{charge_id}",
+                metadata={"telegram_payment_charge_id": charge_id, "payment_type": refund_kind},
+            )
+            await self.repos.admin.audit(
+                conn, actor_id, "refund_stars", "transaction", str(payment["id"]),
+                {"user_id": user_id, "amount": amount, "payment_type": refund_kind},
+            )
+            return {"amount": amount, "payment_type": refund_kind}
 
     async def process_inactive_accounts(self) -> dict[str, int]:
         async with self.pool.acquire() as conn:

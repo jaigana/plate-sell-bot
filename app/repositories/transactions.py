@@ -23,6 +23,16 @@ class TransactionRepository:
     async def lock_by_external_ref(self, conn: asyncpg.Connection, external_ref: str) -> asyncpg.Record | None:
         return await conn.fetchrow("SELECT * FROM transactions WHERE external_ref=$1 FOR UPDATE", external_ref)
 
+    async def lock_refundable_payment(self, conn: asyncpg.Connection, charge_id: str) -> asyncpg.Record | None:
+        return await conn.fetchrow(
+            """SELECT * FROM transactions
+            WHERE external_ref=$1
+              AND status='COMPLETED'
+              AND (metadata->>'kind'='telegram_charge' OR metadata->>'source'='telegram_stars')
+            FOR UPDATE""",
+            charge_id,
+        )
+
     async def lock_pending_mint(self, conn: asyncpg.Connection, user_id: int, plate_id: int) -> asyncpg.Record | None:
         return await conn.fetchrow(
             """SELECT * FROM transactions WHERE user_id=$1 AND plate_id=$2

@@ -10,7 +10,7 @@ def _button(text: str, callback_data: str) -> InlineKeyboardButton:
 
 def home_keyboard(is_admin: bool = False) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.row(_button("🔎 Поиск", "home:search"), _button("🛒 Рынок", "market:all"))
+    builder.row(_button("🔎 Поиск / выпуск", "home:search"), _button("🛒 Рынок", "market:all"))
     builder.row(_button("🔨 Аукционы", "auction:list"), _button("🚘 Мои номера", "plate:mine"))
     builder.row(_button("⭐ Баланс", "balance:view"), _button("👤 Профиль", "profile:view"))
     builder.row(_button("❓ Помощь", "help:view"), _button("⚖️ Правила", "legal:view"))
@@ -35,7 +35,8 @@ def market_keyboard(plates: list[dict]) -> InlineKeyboardMarkup:
 
 def search_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [_button("🇷🇺 Найти / выпустить RU", "mint:country:ru"), _button("🇰🇿 Найти / выпустить KZ", "mint:country:kz")],
+        [_button("🇷🇺 Россия · А001АА77", "mint:country:ru")],
+        [_button("🇰🇿 Казахстан · 777AAA01", "mint:country:kz")],
         [_button("🏠 Главная", "nav:home")],
     ])
 
@@ -91,7 +92,7 @@ def admin_keyboard() -> InlineKeyboardMarkup:
         [_button("📊 Статистика", "admin:stats"), _button("👤 Пользователи", "admin:users")],
         [_button("🚘 Номера", "admin:plates"), _button("🔨 Аукционы", "admin:auctions")],
         [_button("💰 Финансы", "admin:finance"), _button("⚙️ Настройки", "admin:settings")],
-        [_button("🚫 Чёрный список KZ", "admin:blacklists"), _button("🗃 Карточки", "admin:cards")],
+        [_button("🗃 Карточки", "admin:cards")],
         [_button("💾 Резервная копия", "admin:backup")],
         [_button("🏠 Главная", "nav:home")],
     ])

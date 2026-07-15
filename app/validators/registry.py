@@ -13,13 +13,15 @@ class Country:
     name: str
     active: bool
     validator: PlateValidator | None = None
+    example: str = ""
+    format_hint: str = ""
 
 
 class CountryRegistry:
     def __init__(self) -> None:
         self._countries: dict[str, Country] = {
-            "RU": Country("RU", "Россия", True, PlateValidatorRU()),
-            "KZ": Country("KZ", "Казахстан", True, PlateValidatorKZ()),
+            "RU": Country("RU", "Россия", True, PlateValidatorRU(), "А001АА77", "Буквы — только кириллица: А001АА77"),
+            "KZ": Country("KZ", "Казахстан", True, PlateValidatorKZ(), "777AAA01", "Физлицо: 777AAA01 · юрлицо: 001AA01"),
             "UA": Country("UA", "Украина", False),
             "BY": Country("BY", "Беларусь", False),
             "KG": Country("KG", "Кыргызстан", False),
@@ -40,11 +42,11 @@ class CountryRegistry:
         except KeyError as exc:
             raise PlateValidationError("Неизвестная страна.") from exc
 
-    def validate(self, country_code: str, value: str, *, blacklisted_series: set[str] | None = None) -> str:
+    def validate(self, country_code: str, value: str, *, forbidden_series: set[str] | None = None) -> str:
         country = self.get(country_code)
         if not country.active or country.validator is None:
             raise PlateValidationError("Для этой страны валидатор пока не подключён.")
-        return country.validator.validate(value, blacklisted_series=blacklisted_series)
+        return country.validator.validate(value, forbidden_series=forbidden_series)
 
 
 country_registry = CountryRegistry()

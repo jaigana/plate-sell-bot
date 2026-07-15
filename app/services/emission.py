@@ -18,8 +18,8 @@ class EmissionService(Service):
     async def prepare_invoice(self, user_id: int, country_code: str, raw_plate_number: str) -> dict:
         country_code = country_code.upper()
         async with self.pool.acquire() as conn, conn.transaction():
-            blacklist = await self.repos.settings.kz_blacklist(conn) if country_code == "KZ" else set()
-            plate_number = country_registry.validate(country_code, raw_plate_number, blacklisted_series=blacklist)
+            forbidden_series = await self.repos.settings.official_forbidden_series(conn, country_code)
+            plate_number = country_registry.validate(country_code, raw_plate_number, forbidden_series=forbidden_series)
             await conn.execute("SELECT pg_advisory_xact_lock(hashtext($1))", plate_number)
             users = await self.repos.users.lock_many(conn, [user_id])
             user = users.get(user_id)

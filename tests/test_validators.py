@@ -19,7 +19,19 @@ def test_kz_validates_both_formats(value: str) -> None:
     assert country_registry.validate("KZ", value) == value
 
 
-@pytest.mark.parametrize("value", ["777SEX01", "001AA21", "777ААА01", "777AAA00"])
-def test_kz_rejects_blacklist_homoglyph_and_bad_region(value: str) -> None:
+@pytest.mark.parametrize("value", ["001AA21", "777ААА01", "777AAA00"])
+def test_kz_rejects_homoglyph_and_bad_region(value: str) -> None:
     with pytest.raises(PlateValidationError):
         country_registry.validate("KZ", value)
+
+
+def test_kz_rejects_officially_forbidden_series() -> None:
+    with pytest.raises(PlateValidationError):
+        country_registry.validate("KZ", "777SEX01", forbidden_series={"SEX"})
+
+
+def test_active_countries_have_examples_for_the_release_flow() -> None:
+    assert [(country.code, country.example) for country in country_registry.active()] == [
+        ("RU", "А001АА77"),
+        ("KZ", "777AAA01"),
+    ]

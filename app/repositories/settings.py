@@ -22,15 +22,8 @@ class SettingsRepository:
             key, value, actor_id,
         )
 
-    async def kz_blacklist(self, conn: asyncpg.Connection) -> set[str]:
-        return {row["series"] for row in await conn.fetch("SELECT series FROM blacklisted_series WHERE country_code='KZ'")}
-
-    async def add_blacklist(self, conn: asyncpg.Connection, country_code: str, series: str, actor_id: int) -> None:
-        await conn.execute(
-            """INSERT INTO blacklisted_series(country_code,series,created_by) VALUES($1,$2,$3)
-            ON CONFLICT(country_code,series) DO NOTHING""", country_code, series, actor_id
+    async def official_forbidden_series(self, conn: asyncpg.Connection, country_code: str) -> set[str]:
+        rows = await conn.fetch(
+            "SELECT series FROM official_forbidden_plate_series WHERE country_code=$1", country_code.upper()
         )
-
-    async def remove_blacklist(self, conn: asyncpg.Connection, country_code: str, series: str) -> None:
-        await conn.execute("DELETE FROM blacklisted_series WHERE country_code=$1 AND series=$2", country_code, series)
-
+        return {row["series"] for row in rows}

@@ -19,5 +19,5 @@ class AdminInput(StatesGroup):
     transfer_target = State()
     auction_lookup = State()
     setting_value = State()
-    blacklist_series = State()
+    refund_charge_id = State()
     card_edit = State()

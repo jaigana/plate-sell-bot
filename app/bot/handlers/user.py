@@ -17,6 +17,7 @@ from app.bot.screens import LEGAL_NOTICE, Screen, auction_text, home_text, marke
 from app.bot.states import AdminInput, UserInput
 from app.container import AppContext
 from app.domain import AccessDenied, DomainError
+from app.validators.registry import country_registry
 
 logger = logging.getLogger(__name__)
 
@@ -100,7 +101,10 @@ async def _error(event: Message | CallbackQuery, bot: Bot, state: FSMContext, ex
     if isinstance(event, CallbackQuery):
         await event.answer(message, show_alert=True)
     else:
-        await _render(event, bot, state, f"⚠️ {escape(message)}", kb.home_only(), Screen.HELP)
+        await _render(
+            event, bot, state, f"⚠️ <b>Не удалось выполнить действие</b>\n<blockquote>{escape(message)}</blockquote>",
+            kb.home_only(), Screen.HELP,
+        )
 
 
 async def _show_home(event: Message | CallbackQuery, bot: Bot, state: FSMContext, context: AppContext, user_id: int) -> None:
@@ -134,8 +138,12 @@ def build_user_router(context: AppContext) -> Router:
 
     @router.callback_query(F.data == "home:search")
     async def open_search(query: CallbackQuery, bot: Bot, state: FSMContext) -> None:
-        await state.set_state(UserInput.search)
-        await _render(query, bot, state, "🔎 <b>Поиск игрового номера</b>\n\nОтправьте до 15 символов номера.", kb.home_only(), Screen.SEARCH)
+        await state.set_state(None)
+        await _render(
+            query, bot, state,
+            "🔎 <b>Выберите страну</b>\n<blockquote>Сначала выберите страну, затем введите номер. Поиск перед выпуском не требуется.</blockquote>",
+            kb.search_keyboard(), Screen.SEARCH,
+        )
 
     @router.message(UserInput.search, F.text)
     async def execute_search(message: Message, bot: Bot, state: FSMContext) -> None:
@@ -191,9 +199,16 @@ def build_user_router(context: AppContext) -> Router:
     @router.callback_query(F.data.startswith("mint:country:"))
     async def mint_country(query: CallbackQuery, bot: Bot, state: FSMContext) -> None:
         country = query.data.rsplit(":", 1)[1].upper()
+        country_info = country_registry.get(country)
         await state.update_data(mint_country=country)
         await state.set_state(UserInput.mint_plate)
-        await _render(query, bot, state, f"Введите номер для {country}. После проверки откроется счёт в Telegram Stars.", kb.home_only(), Screen.SEARCH)
+        await _render(
+            query, bot, state,
+            f"🚘 <b>Выпуск номера · {escape(country_info.name)}</b>\n"
+            f"<blockquote>{escape(country_info.format_hint)}</blockquote>\n"
+            f"Введите номер. После проверки откроется счёт на Telegram Stars.",
+            kb.home_only(), Screen.SEARCH,
+        )
 
     @router.message(UserInput.mint_plate, F.text)
     async def mint_input(message: Message, bot: Bot, state: FSMContext) -> None:
@@ -396,19 +411,6 @@ def build_user_router(context: AppContext) -> Router:
         except Exception as exc:
             await _error(query, bot, state, exc)
 
-    @router.callback_query(F.data == "admin:blacklists")
-    async def admin_blacklists(query: CallbackQuery, bot: Bot, state: FSMContext) -> None:
-        try:
-            blacklist = await context.admin.blacklist(query.from_user.id)
-            text = "🚫 <b>Чёрный список KZ</b>\n\n" + (", ".join(sorted(blacklist)) if blacklist else "Пользовательских серий нет.")
-            keyboard = InlineKeyboardMarkup(inline_keyboard=[
-                [InlineKeyboardButton(text="➕ Добавить", callback_data="admin:blacklist:add"), InlineKeyboardButton(text="➖ Удалить", callback_data="admin:blacklist:remove")],
-                [InlineKeyboardButton(text="🔙 Админка", callback_data="admin:home")],
-            ])
-            await _render(query, bot, state, text, keyboard, Screen.ADMIN_BLACKLISTS)
-        except Exception as exc:
-            await _error(query, bot, state, exc)
-
     @router.callback_query(F.data == "admin:users")
     async def admin_users_open(query: CallbackQuery, bot: Bot, state: FSMContext) -> None:
         try:
@@ -429,6 +431,7 @@ def build_user_router(context: AppContext) -> Router:
             moderation = InlineKeyboardButton(text="✅ Разблокировать", callback_data=f"admin:unblock:{user_id}") if user["is_blocked"] else InlineKeyboardButton(text="🚫 Заблокировать", callback_data=f"admin:block:{user_id}")
             keyboard = InlineKeyboardMarkup(inline_keyboard=[
                 [moderation, InlineKeyboardButton(text="⭐ Изменить баланс", callback_data=f"admin:balance:{user_id}")],
+                [InlineKeyboardButton(text="↩️ Вернуть Telegram Stars", callback_data=f"admin:refund:{user_id}")],
                 [InlineKeyboardButton(text="🔙 Админка", callback_data="admin:home")],
             ])
             await state.set_state(None)
@@ -483,6 +486,37 @@ def build_user_router(context: AppContext) -> Router:
             await _render(message, bot, state, f"✅ Баланс изменён. Доступно: ⭐{result['available']}, заморожено: ⭐{result['frozen']}.", kb.admin_keyboard(), Screen.ADMIN_FINANCE)
         except ValueError:
             await _error(message, bot, state, DomainError("Используйте формат: изменение|причина."))
+        except Exception as exc:
+            await _error(message, bot, state, exc)
+
+    @router.callback_query(F.data.startswith("admin:refund:"))
+    async def admin_refund_open(query: CallbackQuery, bot: Bot, state: FSMContext) -> None:
+        try:
+            await context.admin.require_admin(query.from_user.id)
+            await state.update_data(admin_target_user_id=_int(query.data.rsplit(":", 1)[1], "Telegram ID"))
+            await state.set_state(AdminInput.refund_charge_id)
+            await _render(
+                query, bot, state,
+                "↩️ <b>Возврат Telegram Stars</b>\n"
+                "<blockquote>Отправьте <code>telegram_payment_charge_id</code> из платежа пользователя. "
+                "Для пополнения баланс должен оставаться доступным; для эмиссии номер должен всё ещё принадлежать пользователю.</blockquote>",
+                kb.admin_keyboard(), Screen.ADMIN_FINANCE,
+            )
+        except Exception as exc:
+            await _error(query, bot, state, exc)
+
+    @router.message(AdminInput.refund_charge_id, F.text)
+    async def admin_refund_apply(message: Message, bot: Bot, state: FSMContext) -> None:
+        try:
+            result = await context.admin.refund_stars(
+                message.from_user.id, (await state.get_data())["admin_target_user_id"], message.text, bot
+            )
+            await state.set_state(None)
+            await _render(
+                message, bot, state,
+                f"✅ <b>Возврат выполнен</b>\n<blockquote>Telegram вернул ⭐{result['amount']}. Тип платежа: {result['payment_type']}.</blockquote>",
+                kb.admin_keyboard(), Screen.ADMIN_FINANCE,
+            )
         except Exception as exc:
             await _error(message, bot, state, exc)
 
@@ -596,26 +630,6 @@ def build_user_router(context: AppContext) -> Router:
             await context.admin.set_setting(message.from_user.id, (await state.get_data())["admin_setting_key"], _int(message.text, "Значение"))
             await state.set_state(None)
             await _render(message, bot, state, "✅ Настройка обновлена.", kb.admin_keyboard(), Screen.ADMIN_SETTINGS)
-        except Exception as exc:
-            await _error(message, bot, state, exc)
-
-    @router.callback_query(F.data.startswith("admin:blacklist:"))
-    async def admin_blacklist_open(query: CallbackQuery, bot: Bot, state: FSMContext) -> None:
-        try:
-            await context.admin.require_admin(query.from_user.id)
-            action = query.data.rsplit(":", 1)[1]
-            await state.update_data(admin_blacklist_add=action == "add")
-            await state.set_state(AdminInput.blacklist_series)
-            await _render(query, bot, state, "Введите серию KZ из 2–3 ASCII букв.", kb.admin_keyboard(), Screen.ADMIN_BLACKLISTS)
-        except Exception as exc:
-            await _error(query, bot, state, exc)
-
-    @router.message(AdminInput.blacklist_series, F.text)
-    async def admin_blacklist_apply(message: Message, bot: Bot, state: FSMContext) -> None:
-        try:
-            await context.admin.set_blacklist(message.from_user.id, message.text, add=(await state.get_data())["admin_blacklist_add"])
-            await state.set_state(None)
-            await _render(message, bot, state, "✅ Чёрный список обновлён.", kb.admin_keyboard(), Screen.ADMIN_BLACKLISTS)
         except Exception as exc:
             await _error(message, bot, state, exc)
 
